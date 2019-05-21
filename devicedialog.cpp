@@ -57,6 +57,9 @@ DeviceDialog::DeviceDialog(RtAudio::Api api, RtAudio::DeviceInfo deviceInfo, QWi
         std::lock_guard<std::mutex> guard(m_runtimeDataMutex);
         m_runtimeData.sinAmplitude = value;
     });
+
+    ui->inputMonitoringGroupBox->setVisible(m_deviceInfo.inputChannels > 0);
+    ui->outputTestingGroupBox->setVisible(m_deviceInfo.outputChannels > 0);
 }
 
 DeviceDialog::~DeviceDialog()
@@ -136,7 +139,7 @@ void DeviceDialog::onActivateDeviceCheckBoxToggled(bool activate)
         outputStreamParams.firstChannel = 0;
         outputStreamParams.nChannels = m_runtimeData.outChannelCount;
 
-        ui->logTextEdit->appendPlainText(QString("Starting audio with %1 inputs & %2 outputs\n").arg(inputStreamParams.nChannels).arg(outputStreamParams.nChannels));
+        ui->logTextEdit->appendPlainText(QString("Starting audio with %1 inputs & %2 outputs").arg(inputStreamParams.nChannels).arg(outputStreamParams.nChannels));
         updateRuntimeWidgets();
 
         m_rtAudio.openStream(outputStreamParams.nChannels>0?&outputStreamParams:nullptr,
@@ -146,7 +149,7 @@ void DeviceDialog::onActivateDeviceCheckBoxToggled(bool activate)
                              &m_runtimeData.bufferSize, &cRtAudioCallback, this, nullptr, &rtAudioErrorCallback);
         m_rtAudio.startStream();
 
-        ui->logTextEdit->appendPlainText(QString(" -> Real buffer Size: %1\n").arg(m_runtimeData.bufferSize));
+        ui->logTextEdit->appendPlainText(QString(" -> Real buffer Size: %1").arg(m_runtimeData.bufferSize));
 
         m_runTimer.start(10);
     } else {
@@ -165,7 +168,13 @@ void DeviceDialog::onActivateDeviceCheckBoxToggled(bool activate)
 
 void DeviceDialog::updateRuntimeWidgets()
 {
-
+    RuntimeData runtimeData;
+    {
+        std::lock_guard<std::mutex> guard(m_runtimeDataMutex);
+        runtimeData = m_runtimeData;
+    }
+    ui->inputMonitoringGroupBox->setVisible(runtimeData.inChannelCount > 0);
+    ui->outputTestingGroupBox->setVisible(runtimeData.outChannelCount > 0);
 }
 
 int DeviceDialog::rtAudioCallback(void* outputBuffer, void* inputBuffer,
@@ -200,10 +209,11 @@ int DeviceDialog::rtAudioCallback(void* outputBuffer, void* inputBuffer,
         runtimeData.inChannelsAmplitude[inChannel] /= nFrames; // Divide once after to avoid dividing nFrames time
     }
     // Compute input channels average & peak amplitude
+    float averageAmplitudeFactor = nFrames*0.0001;
     for (int inChannel=0; inChannel<runtimeData.inChannelCount; inChannel++) {
         // Average
-        runtimeData.inChannelsAverageAmplitude[inChannel] *= 0.99;
-        runtimeData.inChannelsAverageAmplitude[inChannel] += 0.01 * runtimeData.inChannelsAmplitude[inChannel];
+        runtimeData.inChannelsAverageAmplitude[inChannel] *= 1-averageAmplitudeFactor;
+        runtimeData.inChannelsAverageAmplitude[inChannel] += averageAmplitudeFactor * runtimeData.inChannelsAmplitude[inChannel];
         // Peak
         runtimeData.inChannelsPeakAmplitude[inChannel] = std::max(runtimeData.inChannelsPeakAmplitude[inChannel],
                                                                   runtimeData.inChannelsAmplitude[inChannel]);
@@ -232,17 +242,19 @@ void DeviceDialog::onRunTimer()
     }
 
     // Log input channels amplitude
-    QString inChannelsAmplitudeStr;
-    QString inChannelsAverageAmplitudeStr;
-    QString inChannelsPeakAmplitudeStr;
-    for (int i=0; i<runtimeData.inChannelCount; i++) {
-        inChannelsAmplitudeStr += QString("In %1: %2;").arg(i).arg(runtimeData.inChannelsAmplitude[i]);
-        inChannelsAverageAmplitudeStr += QString("In %1: %2;").arg(i).arg(runtimeData.inChannelsAverageAmplitude[i]);
-        inChannelsPeakAmplitudeStr += QString("In %1: %2;").arg(i).arg(runtimeData.inChannelsPeakAmplitude[i]);
+    if (runtimeData.inChannelCount > 0) {
+        QString inChannelsAmplitudeStr;
+        QString inChannelsAverageAmplitudeStr;
+        QString inChannelsPeakAmplitudeStr;
+        for (int i=0; i<runtimeData.inChannelCount; i++) {
+            inChannelsAmplitudeStr += QString("In %1: %2;").arg(i).arg(runtimeData.inChannelsAmplitude[i]);
+            inChannelsAverageAmplitudeStr += QString("In %1: %2;").arg(i).arg(runtimeData.inChannelsAverageAmplitude[i]);
+            inChannelsPeakAmplitudeStr += QString("In %1: %2;").arg(i).arg(runtimeData.inChannelsPeakAmplitude[i]);
+        }
+        ui->inputAmplitudeLabel->setText("Amplitude per channel: " + inChannelsAmplitudeStr + "\n" +
+                                         "Average amplitude per channel: " + inChannelsAverageAmplitudeStr + "\n" +
+                                         "Peak amplitude per channel: " + inChannelsPeakAmplitudeStr + "\n");
     }
-    ui->inputAmplitudeLabel->setText("Amplitude per channel: " + inChannelsAmplitudeStr + "\n" +
-                                     "Average amplitude per channel: " + inChannelsAverageAmplitudeStr + "\n" +
-                                     "Peak amplitude per channel: " + inChannelsPeakAmplitudeStr + "\n");
 
     // Log error status
     if (runtimeData.lastErrorStatus != 0) {

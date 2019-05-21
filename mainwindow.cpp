@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include <QStandardItemModel>
+#include <QMessageBox>
 #include "devicedialog.h"
 #include "definitions.h"
 
@@ -37,6 +38,10 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->openDeviceButton,&QPushButton::clicked,[=](){
         auto selectedIndex = ui->deviceListView->currentIndex();
         auto deviceInfo = selectedIndex.data(DeviceInfoRole).value<RtAudio::DeviceInfo>();
+        if (deviceInfo.inputChannels==0 && deviceInfo.outputChannels==0) {
+            QMessageBox::information(nullptr,qAppName(),"Error: This audio device is listed but has no input or output channels.",QMessageBox::Ok);
+            return;
+        }
         auto api = selectedIndex.data(ApiRole).value<RtAudio::Api>();
         auto deviceDialog = new DeviceDialog(api,deviceInfo,this);
         deviceDialog->setAttribute(Qt::WA_DeleteOnClose);
