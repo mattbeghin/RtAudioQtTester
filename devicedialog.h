@@ -1,7 +1,7 @@
 #ifndef DEVICEDIALOG_H
 #define DEVICEDIALOG_H
 
-#include <thread>
+#include <mutex>
 #include <QDialog>
 #include <QTimer>
 #include "RtAudio.h"
@@ -32,8 +32,8 @@ private:
 
     struct RuntimeData {
         // Setup
-        int inChannelCount=0;
-        int outChannelCount=0;
+        unsigned int inChannelCount=0;
+        unsigned int outChannelCount=0;
         unsigned int sampleRate=0;
         unsigned int bufferSize=0;
         // UI => callback
