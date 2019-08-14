@@ -165,21 +165,31 @@ void DeviceDialog::onActivateDeviceCheckBoxToggled(bool activate)
         ui->logTextEdit->appendPlainText(QString("Starting audio with %1 inputs & %2 outputs").arg(inputStreamParams.nChannels).arg(outputStreamParams.nChannels));
         updateRuntimeWidgets();
 
-        m_rtAudio.openStream(outputStreamParams.nChannels>0?&outputStreamParams:nullptr,
-                             inputStreamParams.nChannels>0?&inputStreamParams:nullptr,
-                             RTAUDIO_FLOAT32,
-                             m_runtimeData.sampleRate,
-                             &m_runtimeData.bufferSize, &cRtAudioCallback, this, nullptr, &rtAudioErrorCallback);
+        std::string errorStr;
 
-        auto errorStr = getGErrorString();
+        try {
+            m_rtAudio.openStream(outputStreamParams.nChannels>0?&outputStreamParams:nullptr,
+                                 inputStreamParams.nChannels>0?&inputStreamParams:nullptr,
+                                 RTAUDIO_FLOAT32,
+                                 m_runtimeData.sampleRate,
+                                 &m_runtimeData.bufferSize, &cRtAudioCallback, this, nullptr, &rtAudioErrorCallback);
+            errorStr = getGErrorString();
+        } catch (const std::exception& e) {
+            errorStr = "Exception catched opening stream:" + std::string(e.what());
+        }
+
         if (!errorStr.empty()) {
             ui->logTextEdit->appendPlainText("Error:" + QString::fromStdString(errorStr) + "\n");
         }
 
         if (m_rtAudio.isStreamOpen()) {
-            m_rtAudio.startStream();
+            try {
+                m_rtAudio.startStream();
+                errorStr = getGErrorString();
+            } catch (const std::exception& e) {
+                errorStr = "Exception catched starting stream:" + std::string(e.what());
+            }
 
-            auto errorStr = getGErrorString();
             if (!errorStr.empty()) {
                 ui->logTextEdit->appendPlainText("Error:" + QString::fromStdString(errorStr) + "\n");
             }
